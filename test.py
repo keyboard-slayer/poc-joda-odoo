@@ -51,7 +51,8 @@ class TestFuncChecker(unittest.TestCase):
             return f"A: {a}, B: {b}, C: {c}"
 
         self.assertEqual(
-            eval(expr_checker("abc('aaa', 'bbb', 'ccc')", _WHITELIST, _ALLOWED_ATTR, {})),
+            eval(expr_checker("abc('aaa', 'bbb', 'ccc')",
+                 _WHITELIST, _ALLOWED_ATTR, {})),
             "A: aaa, B: bbb, C: ccc"
         )
 
@@ -62,7 +63,7 @@ class TestFuncChecker(unittest.TestCase):
     def test_comp_expr(self):
         self.assertEqual(
             eval(expr_checker(
-            "[(lambda x: x**2)(n) for n in range(1, 11)]", _WHITELIST, _ALLOWED_ATTR, {})),
+                "[(lambda x: x**2)(n) for n in range(1, 11)]", _WHITELIST, _ALLOWED_ATTR, {})),
             [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
         )
 
@@ -85,12 +86,14 @@ class TestFuncChecker(unittest.TestCase):
 
     def test_method_return(self):
         self.assertEqual(
-            eval(expr_checker("Good().tell_me_hi()", _WHITELIST, _ALLOWED_ATTR, {})),
+            eval(expr_checker("Good().tell_me_hi()",
+                 _WHITELIST, _ALLOWED_ATTR, {})),
             "hi"
         )
 
         with self.assertRaises(ValueError):
-            eval(expr_checker("Good().gift_of_satan()", _WHITELIST, _ALLOWED_ATTR, {}))
+            eval(expr_checker("Good().gift_of_satan()",
+                 _WHITELIST, _ALLOWED_ATTR, {}))
 
     def test_object_with(self):
         exec(expr_checker(cleandoc("""
@@ -154,7 +157,8 @@ class TestFuncChecker(unittest.TestCase):
         a = Good()
 
         with self.assertRaises(ValueError):
-            exec(expr_checker("print(a._secret_stuff)", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("print(a._secret_stuff)",
+                 _WHITELIST, _ALLOWED_ATTR, {}))
 
         with self.assertRaises(ValueError):
             exec(expr_checker("a._secret_stuff = 42", _WHITELIST, _ALLOWED_ATTR, {}))
@@ -183,6 +187,27 @@ class TestFuncChecker(unittest.TestCase):
 
         a.evil.close()
 
+    def test_overwrite(self):
+        a = Good()
+
+        code = cleandoc("""
+                def check_type(t):
+                    return t
+                
+                c = a.evil""")
+
+        code2 = cleandoc("""
+                check_type = lambda t: t
+                c = a.evil""")
+
+        _ALLOWED_ATTR.add("evil")
+        _WHITELIST.add(type(lambda x: x))
+
+        with self.assertRaises(NameError):
+            exec(expr_checker(code, _WHITELIST, _ALLOWED_ATTR, {}))
+
+        with self.assertRaises(NameError):
+            exec(expr_checker(code2, _WHITELIST, _ALLOWED_ATTR, {}))
 
 
 if __name__ == "__main__":

@@ -58,6 +58,9 @@ def check_node(node):
         new_func = ast.Name(_check_function.__name__, ctx=ast.Load())
         node.args = [func] + node.args
         node.func = new_func
+    elif isinstance(node, ast.FunctionDef) and node.name in [_check_function.__name__, "check_ro", "check_type"] \
+            or isinstance(node, ast.Name) and node.id in [_check_function.__name__, "check_ro", "check_type"]:
+        raise NameError(f"safe_eval: {node.id if isinstance(node, ast.Name) else node.name} is reserved")
     elif isinstance(node, ast.Attribute):
         if node.attr not in _allowed_attr:
             raise ValueError(
@@ -117,7 +120,7 @@ def expr_checker(expr, whitelist, allowed_attr, readonly, debug=False, check_fun
 
     for node in expr_ast.body:
         check_node(node)
-    
+
     if _debug:
         print(ast.unparse(expr_ast))
 
