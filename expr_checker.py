@@ -2,15 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import ast
-from collections.abc import Iterable
 from copy import copy
 
 
 _safe_type = None
-_allowed_attr = None
 _readonly = None
-_debug = False
-_check_function = None
 
 
 def check_type(obj):
@@ -37,91 +33,82 @@ def check_ro(obj):
         return obj
 
 
-def check_node(node):
-    if isinstance(node, ast.Call):
-        list(map(check_node, node.args))
+class NodeChecker(ast.NodeTransformer):
+    def __init__(self, check_fn, allowed_attr):
+        self.check_fn = check_fn.__name__
+        self.allowed_attr = allowed_attr
+
+        super().__init__()
+
+    def visit_Call(self, node):
+        list(map(self.visit, node.args))
 
         if isinstance(node.func, ast.Attribute):
-            if node.func.attr in _allowed_attr:
+            if node.func.attr in self.allowed_attr:
                 raise ValueError(
-                    f"safe_eval doesn't allow you to read {node.attr}")
+                    f"safe_eval doesn't allow you to read {node.func.attr}")
 
             name = copy(node.func.value)
             node.func.value.__class__ = ast.Call
             node.func.value.func = ast.Name("check_ro", ctx=ast.Load())
             node.func.value.args = [name]
             node.func.value.keywords = []
+        
         else:
-            check_node(node.func)
+            self.generic_visit(node.func)            
+            
+        return ast.Call(
+            func=ast.Name(self.check_fn, ctx=ast.Load()),
+            args=[node.func] + node.args,
+            keywords=node.keywords
+        )
 
-        func = node.func
-        new_func = ast.Name(_check_function.__name__, ctx=ast.Load())
-        node.args = [func] + node.args
-        node.func = new_func
-    elif isinstance(node, ast.FunctionDef) and node.name in [_check_function.__name__, "check_ro", "check_type"] \
-            or isinstance(node, ast.Name) and node.id in [_check_function.__name__, "check_ro", "check_type"]:
-        raise NameError(f"safe_eval: {node.id if isinstance(node, ast.Name) else node.name} is reserved")
-    elif isinstance(node, ast.Attribute):
-        if node.attr not in _allowed_attr:
+    def visit_FunctionDef(self, node):
+        if node.name in [self.check_fn, "check_ro", "check_type"]:
+            raise NameError(f"safe_eval: {node.name} is a reserved name")
+        
+        return node
+
+    def visit_Name(self, node):
+        if node.id in [self.check_fn, "check_ro", "check_type"]:
+            raise NameError(f"safe_eval: {node.id} is a reserved name")
+
+        return node
+
+    def visit_Attribute(self, node):
+        if node.attr not in self.allowed_attr:
             raise ValueError(
                 f"safe_eval doesn't allow you to read {node.attr}")
 
         if isinstance(node.ctx, ast.Load):
-            attr = copy(node)
-            node.__class__ = ast.Call
-            node.func = ast.Name("check_type", ctx=ast.Load())
-            node.args = [attr]
-            node.keywords = []
+            return ast.Call(
+                func=ast.Name("check_type", ctx=ast.Load()),
+                args=[node],
+                keywords=[]
+            )
+
         else:
-            name = copy(node.value)
-            node.value.__class__ = ast.Call
-            node.value.func = ast.Name("check_ro", ctx=ast.Load())
-            node.value.args = [name]
-            node.value.keywords = []
-    elif isinstance(node, ast.Assign):
-        list(map(check_node, node.targets))
+            return ast.Call(
+                func=ast.Name("check_ro", ctx=ast.Load()),
+                args=[node.value],
+                keywords=[]
+            )
 
-        value = copy(node.value)
-        node.value.__class__ = ast.Call
-        node.value.func = ast.Name("check_type", ctx=ast.Load())
-        node.value.args = [value]
-        node.value.keywords = []
-
-    elif hasattr(node, "__dict__"):
-        for attr in node.__dict__:
-            assert(hasattr(node, "__dict__"))
-            if hasattr(node.__dict__[attr], "__module__") and node.__dict__[attr].__module__ == "ast":
-                check_node(node.__dict__[attr])
-            elif isinstance(node.__dict__[attr], Iterable) and not isinstance(node.__dict__[attr], str):
-                for subnode in node.__dict__[attr]:
-                    if hasattr(subnode, "__module__") and subnode.__module__ == "ast":
-                        check_node(subnode)
-    else:
-        raise NotImplementedError()
+    def visit_Assign(self, node):
+        list(map(self.visit, node.targets))
+        return ast.Call(
+            func=ast.Name("check_type", ctx=ast.Load()),
+            args=[node.value],
+            keywords=[]
+        )
 
 
-def expr_checker(expr, whitelist, allowed_attr, readonly, debug=False, check_function=test):
+def expr_checker(expr, whitelist, allowed_attr, readonly, check_function=test):
     global _safe_type
-    global _allowed_attr
     global _readonly
-    global _debug
-    global _check_function
 
     _safe_type = whitelist
-    _allowed_attr = allowed_attr
     _readonly = readonly
-    _debug = debug
-    _check_function = check_function
 
-    expr_ast = ast.parse(expr)
+    return ast.unparse(NodeChecker(check_function, allowed_attr).visit(ast.parse(expr)))
 
-    if _debug:
-        print(ast.dump(expr_ast, indent=4))
-
-    for node in expr_ast.body:
-        check_node(node)
-
-    if _debug:
-        print(ast.unparse(expr_ast))
-
-    return ast.unparse(expr_ast)
