@@ -5,14 +5,8 @@ import unittest
 from inspect import cleandoc
 from expr_checker import *
 
-
 class Dangerous:
-    def __enter__(self):
-        return Dangerous()
-
-    def __exit__(self, exec_type, exec_value, traceback):
-        pass
-
+    pass
 
 class Good:
     a = "hi"
@@ -20,12 +14,9 @@ class Good:
 
     _secret_stuff = "1+1=3"
 
-    def gift_of_satan(self):
-        return self.evil
-
     def tell_me_hi(self):
         return self.a
-
+    
     def __enter__(self):
         return Good()
 
@@ -42,7 +33,7 @@ class ReadOnlyObject:
 
 
 _WHITELIST = {str, int, type(None), Good, type(range(0))}
-_ALLOWED_ATTR = {"a", "x"}
+_ALLOWED_ATTR = {"a", "x", "tell_me_hi", "set_x_value"}
 
 
 class TestFuncChecker(unittest.TestCase):
@@ -70,9 +61,13 @@ class TestFuncChecker(unittest.TestCase):
     def test_attribute(self):
         a = Good()
         eval(expr_checker("a.a", _WHITELIST, _ALLOWED_ATTR, {}))
+        eval(expr_checker("a.tell_me_hi()", _WHITELIST, _ALLOWED_ATTR, {}))
 
         with self.assertRaises(ValueError):
             eval(expr_checker("a.evil", _WHITELIST, _ALLOWED_ATTR, {}))
+            
+        with self.assertRaises(ValueError):
+            eval(expr_checker("a.gather_secret()", _WHITELIST, _ALLOWED_ATTR, {}))
 
     def test_reaonly_type(self):
         a = ReadOnlyObject(42)
@@ -128,7 +123,7 @@ class TestFuncChecker(unittest.TestCase):
 
         @evil
         def foo():
-            return Good()
+            pass
 
         with self.assertRaises(ValueError):
             eval(expr_checker("foo()", _WHITELIST, _ALLOWED_ATTR, {}))
@@ -208,6 +203,23 @@ class TestFuncChecker(unittest.TestCase):
 
         with self.assertRaises(NameError):
             exec(expr_checker(code2, _WHITELIST, _ALLOWED_ATTR, {}))
+    
+    def test_collections(self):
+        def a(a):
+            return a
+    
+        exec(expr_checker("a([1, Good(), 3])", _WHITELIST, _ALLOWED_ATTR, {}))
+        exec(expr_checker("a((4, 5, 6))", _WHITELIST, _ALLOWED_ATTR, {}))
+        exec(expr_checker("a({7, 'hi', None})", _WHITELIST, _ALLOWED_ATTR, {}))
+
+        with self.assertRaises(ValueError):
+            exec(expr_checker("a([1.5, 2, 3])", _WHITELIST, _ALLOWED_ATTR, {}))
+
+        with self.assertRaises(ValueError):
+            exec(expr_checker("a((4, Dangerous(), 'lol'))", _WHITELIST, _ALLOWED_ATTR, {}))
+            
+        with self.assertRaises(ValueError):
+            exec(expr_checker("a({4, 3.1415, 3})", _WHITELIST, _ALLOWED_ATTR, {}))
 
 
 if __name__ == "__main__":

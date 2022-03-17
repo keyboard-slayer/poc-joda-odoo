@@ -10,7 +10,7 @@ _readonly = None
 
 
 def check_type(obj):
-    if obj in {list, tuple, set}:
+    if type(obj) in {list, tuple, set}:
         list(map(check_type, obj))
         return obj
     elif type(obj) not in _safe_type:
@@ -44,7 +44,7 @@ class NodeChecker(ast.NodeTransformer):
         list(map(self.visit, node.args))
 
         if isinstance(node.func, ast.Attribute):
-            if node.func.attr in self.allowed_attr:
+            if node.func.attr not in self.allowed_attr:
                 raise ValueError(
                     f"safe_eval doesn't allow you to read {node.func.attr}")
 
