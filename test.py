@@ -5,8 +5,10 @@ import unittest
 from inspect import cleandoc
 from expr_checker import *
 
+
 class Dangerous:
     pass
+
 
 class Good:
     a = "hi"
@@ -16,7 +18,7 @@ class Good:
 
     def tell_me_hi(self):
         return self.a
-    
+
     def __enter__(self):
         return Good()
 
@@ -32,7 +34,19 @@ class ReadOnlyObject:
         self.x = x
 
 
-_WHITELIST = {str, int, type(None), Good, type(range(0))}
+def check_type(method, value):
+    safe_type = (str, int, type(None), type(range(0)), Good)
+
+    if type(value) in (list, tuple, set):
+        for val in value:
+            check_type(method, val)
+        return value
+    elif type(value) not in safe_type:
+        raise ValueError(f"safe_eval didn't like {value}")
+    else:
+        return value
+
+
 _ALLOWED_ATTR = {"a", "x", "tell_me_hi", "set_x_value"}
 
 
@@ -41,69 +55,64 @@ class TestFuncChecker(unittest.TestCase):
         def abc(a, b, c):
             return f"A: {a}, B: {b}, C: {c}"
 
-        self.assertEqual(
-            eval(expr_checker("abc('aaa', 'bbb', 'ccc')",
-                 _WHITELIST, _ALLOWED_ATTR, {})),
-            "A: aaa, B: bbb, C: ccc"
-        )
+        ret = eval(compile(expr_checker(
+            "abc('aaa', 'bbb', 'ccc')", _ALLOWED_ATTR, {}), "", "exec"))
 
         with self.assertRaises(ValueError):
-            eval(expr_checker("abc(a='aaa', c='ccc', b=Dangerous())",
-                 _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("abc(a='aaa', c='ccc', b=Dangerous())",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_comp_expr(self):
-        self.assertEqual(
-            eval(expr_checker(
-                "[(lambda x: x**2)(n) for n in range(1, 11)]", _WHITELIST, _ALLOWED_ATTR, {})),
-            [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
-        )
+        exec(expr_checker(
+            "[(lambda x: x**2)(n) for n in range(1, 11)]", _ALLOWED_ATTR, {}, check_type=check_type)),
 
-    def test_attribute(self):
-        a = Good()
-        eval(expr_checker("a.a", _WHITELIST, _ALLOWED_ATTR, {}))
-        eval(expr_checker("a.tell_me_hi()", _WHITELIST, _ALLOWED_ATTR, {}))
+        def test_attribute(self):
+            a = Good()
+            exec(expr_checker("a.a", _ALLOWED_ATTR, {}, check_type=check_type))
+            exec(expr_checker("a.tell_me_hi()", _ALLOWED_ATTR, {}, check_type=check_type))
 
-        with self.assertRaises(ValueError):
-            eval(expr_checker("a.evil", _WHITELIST, _ALLOWED_ATTR, {}))
-            
-        with self.assertRaises(ValueError):
-            eval(expr_checker("a.gather_secret()", _WHITELIST, _ALLOWED_ATTR, {}))
+            with self.assertRaises(ValueError):
+                exec(expr_checker("a.evil", _ALLOWED_ATTR, {}, check_type=check_type))
 
-    def test_reaonly_type(self):
-        a = ReadOnlyObject(42)
+            with self.assertRaises(ValueError):
+                exec(expr_checker("a.gather_secret()",
+                    _ALLOWED_ATTR, {}, check_type=check_type))
 
-        eval(expr_checker("a.set_x_value(25)",
-             _WHITELIST, _ALLOWED_ATTR, {ReadOnlyObject}))
-        exec(expr_checker("a.x = 99", _WHITELIST,
-             _ALLOWED_ATTR, {ReadOnlyObject}))
+        def test_reaonly_type(self):
+            a = ReadOnlyObject(42)
 
-        self.assertEqual(a.x, 42)
+            exec(expr_checker("a.set_x_value(25)",
+                _ALLOWED_ATTR, {ReadOnlyObject}))
 
-    def test_method_return(self):
-        self.assertEqual(
-            eval(expr_checker("Good().tell_me_hi()",
-                 _WHITELIST, _ALLOWED_ATTR, {})),
-            "hi"
-        )
+            exec(expr_checker("a.x = 99", _ALLOWED_ATTR, {ReadOnlyObject}))
+            self.assertEqual(a.x, 42)
 
-        with self.assertRaises(ValueError):
-            eval(expr_checker("Good().gift_of_satan()",
-                 _WHITELIST, _ALLOWED_ATTR, {}))
+        def test_delete_attr(self):
+            with self.assertRaises(ValueError):
+                exec(expr_checker("del a.x", _ALLOWED_ATTR, {}, check_type=check_type))
+
+        def test_method_return(self):
+            exec(expr_checker("Good().tell_me_hi()",
+                _ALLOWED_ATTR, {}, check_type=check_type)),
+
+            with self.assertRaises(ValueError):
+                exec(expr_checker("Good().gift_of_satan()",
+                     _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_object_with(self):
         exec(expr_checker(cleandoc("""
             with Good() as g:
-                g.tell_me_hi()"""), _WHITELIST, _ALLOWED_ATTR, {}))
+                g.tell_me_hi()"""), _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(ValueError):
             exec(expr_checker(cleandoc("""
                 with Good() as g:
-                    g.gift_of_satan()"""), _WHITELIST, _ALLOWED_ATTR, {}))
+                    g.gift_of_satan()"""), _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(ValueError):
             exec(expr_checker(cleandoc("""
                 with Dangerous() as d:
-                    pass"""), _WHITELIST, _ALLOWED_ATTR, {}))
+                    pass"""), _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_function_return(self):
         def foo():
@@ -112,10 +121,10 @@ class TestFuncChecker(unittest.TestCase):
         def anti_foo():
             return Dangerous()
 
-        eval(expr_checker("foo()", _WHITELIST, _ALLOWED_ATTR, {}))
+        exec(expr_checker("foo()", _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(ValueError):
-            eval(expr_checker("anti_foo()", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("anti_foo()", _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_evil_decorator(self):
         def evil(func):
@@ -126,42 +135,44 @@ class TestFuncChecker(unittest.TestCase):
             pass
 
         with self.assertRaises(ValueError):
-            eval(expr_checker("foo()", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("foo()", _ALLOWED_ATTR, {}, check_type=check_type))
 
-    def test_evil_eval(self):
+    def test_evil_exec(self):
         with self.assertRaises(ValueError):
-            eval(expr_checker("eval('3.1415')", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("eval('3.1415')",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_from_good_to_dangerous(self):
         a = Good()
 
         with self.assertRaises(ValueError):
             exec(expr_checker("a.__class__ = Dangerous",
-                 _WHITELIST, _ALLOWED_ATTR, {}))
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_hijacking_global(self):
         with self.assertRaises(ValueError):
             exec(expr_checker(
-                "globals()['Good'] = Dangerous", _WHITELIST, _ALLOWED_ATTR, {}))
+                "globals()['Good'] = Dangerous", _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(ValueError):
             exec(expr_checker(
-                "globals()['evil'] = lambda: Dangerous()", _WHITELIST, _ALLOWED_ATTR, {}))
+                "globals()['evil'] = lambda: Dangerous()", _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_forbidden_attr(self):
         a = Good()
 
         with self.assertRaises(ValueError):
             exec(expr_checker("print(a._secret_stuff)",
-                 _WHITELIST, _ALLOWED_ATTR, {}))
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(ValueError):
-            exec(expr_checker("a._secret_stuff = 42", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("a._secret_stuff = 42",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_dangerous_lambda(self):
         with self.assertRaises(ValueError):
             exec(expr_checker("(lambda: print(Dangerous()))()",
-                 _WHITELIST, _ALLOWED_ATTR, {}))
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_multiline(self):
         code = cleandoc("""
@@ -171,14 +182,15 @@ class TestFuncChecker(unittest.TestCase):
             b()
         """)
 
-        exec(expr_checker(code, _WHITELIST, _ALLOWED_ATTR, {}))
+        exec(expr_checker(code, _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_file_open(self):
         a = Good()
         a.evil = open("test.py")
 
         with self.assertRaises(ValueError):
-            exec(expr_checker("print(a.evil)", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("print(a.evil)",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
         a.evil.close()
 
@@ -196,31 +208,60 @@ class TestFuncChecker(unittest.TestCase):
                 c = a.evil""")
 
         _ALLOWED_ATTR.add("evil")
-        _WHITELIST.add(type(lambda x: x))
 
         with self.assertRaises(NameError):
-            exec(expr_checker(code, _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker(code, _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(NameError):
-            exec(expr_checker(code2, _WHITELIST, _ALLOWED_ATTR, {}))
-    
+            exec(expr_checker(code2, _ALLOWED_ATTR, {}, check_type=check_type))
+
     def test_collections(self):
         def a(a):
             return a
-    
-        exec(expr_checker("a([1, Good(), 3])", _WHITELIST, _ALLOWED_ATTR, {}))
-        exec(expr_checker("a((4, 5, 6))", _WHITELIST, _ALLOWED_ATTR, {}))
-        exec(expr_checker("a({7, 'hi', None})", _WHITELIST, _ALLOWED_ATTR, {}))
+
+        exec(expr_checker("a([1, Good(), 3])",
+             _ALLOWED_ATTR, {}, check_type=check_type))
+        exec(expr_checker("a((4, 5, 6))", _ALLOWED_ATTR, {}, check_type=check_type))
+        exec(expr_checker("a({7, 'hi', None})",
+             _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(ValueError):
-            exec(expr_checker("a([1.5, 2, 3])", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("a([1.5, 2, 3])",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
         with self.assertRaises(ValueError):
-            exec(expr_checker("a((4, Dangerous(), 'lol'))", _WHITELIST, _ALLOWED_ATTR, {}))
-            
-        with self.assertRaises(ValueError):
-            exec(expr_checker("a({4, 3.1415, 3})", _WHITELIST, _ALLOWED_ATTR, {}))
+            exec(expr_checker("a((4, Dangerous(), 'lol'))",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
+        with self.assertRaises(ValueError):
+            exec(expr_checker("a({4, 3.1415, 3})",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
+
+    def test_isinstance_bad_idea(self):
+        class Dangerous2(Good):
+            pass
+
+        def check_type2(method, value):
+            safe_type = (str, int, type(None), type(range(0)), Good)
+
+            if isinstance(value, (list, tuple, set)):
+                for val in value:
+                    check_type(method, val)
+                return value
+            elif not isinstance(value, safe_type):
+                raise ValueError(f"safe_eval didn't like {value}")
+            else:
+                return value
+
+        code = "(1, 'Hi', Dangerous2())"
+
+        # This pass
+        exec(expr_checker(code, _ALLOWED_ATTR, {}, check_type=check_type2))
+
+        with self.assertRaises(ValueError):
+            # This doesn't 
+           exec(expr_checker(code, _ALLOWED_ATTR, {}, check_type=check_type)) 
+           
 
 if __name__ == "__main__":
     unittest.main()

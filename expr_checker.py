@@ -3,27 +3,34 @@
 
 import ast
 from copy import copy
+from enum import auto, Enum
+from inspect import getsource
+from textwrap import dedent
 
-
-_safe_type = None
 _readonly = None
 
 
-def check_type(obj):
-    if type(obj) in {list, tuple, set}:
-        list(map(check_type, obj))
-        return obj
-    elif type(obj) not in _safe_type:
-        raise ValueError(f"safe_eval didn't like {obj}")
+def ast_default_check_type(method, value):
+    safe_type = (str, int, type(None), type(range(0)))
+
+    if isinstance(value, (list, tuple, set)):
+        for val in value:
+            ast_default_check_type(method, val)
+        return value
+    elif type(value) not in safe_type:
+        raise ValueError(f"safe_eval didn't like {value}")
     else:
-        return obj
+        return value
 
 
-def test(func, *args, **kwargs):
-    list(map(check_type, kwargs.values()))
-    list(map(check_type, args))
+def ast_default_test(func, check_type, *args, **kwargs):
+    for arg in args:
+        check_type("arguments", arg)
+    
+    for arg in kwargs.values():
+        check_type("arguments", arg)
 
-    return check_type(func(*args, **kwargs))
+    return check_type("returned", func(*args, **kwargs))
 
 
 def check_ro(obj):
@@ -34,9 +41,12 @@ def check_ro(obj):
 
 
 class NodeChecker(ast.NodeTransformer):
-    def __init__(self, check_fn, allowed_attr):
+    def __init__(self, check_fn, check_type_fn, allowed_attr):
         self.check_fn = check_fn.__name__
+        self.check_type_fn = check_type_fn.__name__
         self.allowed_attr = allowed_attr
+
+        self.reserved_name = [self.check_fn, self.check_type_fn, "check_ro"]
 
         super().__init__()
 
@@ -53,24 +63,25 @@ class NodeChecker(ast.NodeTransformer):
             node.func.value.func = ast.Name("check_ro", ctx=ast.Load())
             node.func.value.args = [name]
             node.func.value.keywords = []
-        
+
         else:
-            self.generic_visit(node.func)            
-            
+            self.generic_visit(node.func)
+
         return ast.Call(
             func=ast.Name(self.check_fn, ctx=ast.Load()),
-            args=[node.func] + node.args,
+            args=[node.func, ast.Name(
+                self.check_type_fn, ctx=ast.Load())] + node.args,
             keywords=node.keywords
         )
 
     def visit_FunctionDef(self, node):
-        if node.name in [self.check_fn, "check_ro", "check_type"]:
+        if node.name in self.reserved_name:
             raise NameError(f"safe_eval: {node.name} is a reserved name")
-        
+
         return node
 
     def visit_Name(self, node):
-        if node.id in [self.check_fn, "check_ro", "check_type"]:
+        if node.id in self.reserved_name:
             raise NameError(f"safe_eval: {node.id} is a reserved name")
 
         return node
@@ -82,33 +93,38 @@ class NodeChecker(ast.NodeTransformer):
 
         if isinstance(node.ctx, ast.Load):
             return ast.Call(
-                func=ast.Name("check_type", ctx=ast.Load()),
-                args=[node],
+                func=ast.Name(self.check_type_fn, ctx=ast.Load()),
+                args=[ast.Constant("attribute"), node],
                 keywords=[]
             )
 
-        else:
+        elif isinstance(node.ctx, ast.Store):
             return ast.Call(
                 func=ast.Name("check_ro", ctx=ast.Load()),
                 args=[node.value],
                 keywords=[]
             )
 
+        elif isinstance(node.ctx, ast.Del):
+            raise ValueError("safe_eval: You can't delete attribute")
+
     def visit_Assign(self, node):
         list(map(self.visit, node.targets))
+
         return ast.Call(
-            func=ast.Name("check_type", ctx=ast.Load()),
-            args=[node.value],
+            func=ast.Name(self.check_type_fn, ctx=ast.Load()),
+            args=[ast.Constant("assignation"), node.value],
             keywords=[]
         )
 
 
-def expr_checker(expr, whitelist, allowed_attr, readonly, check_function=test):
-    global _safe_type
+def expr_checker(expr, allowed_attr, readonly, check_type=ast_default_check_type, check_function=ast_default_test):
     global _readonly
 
-    _safe_type = whitelist
     _readonly = readonly
-
-    return ast.unparse(NodeChecker(check_function, allowed_attr).visit(ast.parse(expr)))
-
+    
+    code = f"""{dedent(getsource(check_type))}
+{dedent(getsource(check_function))}
+{ast.unparse(NodeChecker(check_function, check_type, allowed_attr).visit(ast.parse(expr)))}
+    """
+    return code
