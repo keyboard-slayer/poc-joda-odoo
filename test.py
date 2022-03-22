@@ -66,38 +66,38 @@ class TestFuncChecker(unittest.TestCase):
         exec(expr_checker(
             "[(lambda x: x**2)(n) for n in range(1, 11)]", _ALLOWED_ATTR, {}, check_type=check_type)),
 
-        def test_attribute(self):
-            a = Good()
-            exec(expr_checker("a.a", _ALLOWED_ATTR, {}, check_type=check_type))
-            exec(expr_checker("a.tell_me_hi()", _ALLOWED_ATTR, {}, check_type=check_type))
+    def test_attribute(self):
+        a = Good()
+        exec(expr_checker("a.a", _ALLOWED_ATTR, {}, check_type=check_type))
+        exec(expr_checker("a.tell_me_hi()", _ALLOWED_ATTR, {}, check_type=check_type))
 
-            with self.assertRaises(ValueError):
-                exec(expr_checker("a.evil", _ALLOWED_ATTR, {}, check_type=check_type))
+        with self.assertRaises(ValueError):
+            exec(expr_checker("a.evil", _ALLOWED_ATTR, {}, check_type=check_type))
 
-            with self.assertRaises(ValueError):
-                exec(expr_checker("a.gather_secret()",
-                    _ALLOWED_ATTR, {}, check_type=check_type))
+        with self.assertRaises(ValueError):
+            exec(expr_checker("a.gather_secret()",
+                _ALLOWED_ATTR, {}, check_type=check_type))
 
-        def test_reaonly_type(self):
-            a = ReadOnlyObject(42)
+    def test_reaonly_type(self):
+        a = ReadOnlyObject(42)
 
-            exec(expr_checker("a.set_x_value(25)",
-                _ALLOWED_ATTR, {ReadOnlyObject}))
+        exec(expr_checker("a.set_x_value(25)",
+            _ALLOWED_ATTR, {ReadOnlyObject}))
 
-            exec(expr_checker("a.x = 99", _ALLOWED_ATTR, {ReadOnlyObject}))
-            self.assertEqual(a.x, 42)
+        exec(expr_checker("a.x = 99", _ALLOWED_ATTR, {ReadOnlyObject}))
+        self.assertEqual(a.x, 42)
 
-        def test_delete_attr(self):
-            with self.assertRaises(ValueError):
-                exec(expr_checker("del a.x", _ALLOWED_ATTR, {}, check_type=check_type))
+    def test_delete_attr(self):
+        with self.assertRaises(ValueError):
+            exec(expr_checker("del a.x", _ALLOWED_ATTR, {}, check_type=check_type))
 
-        def test_method_return(self):
-            exec(expr_checker("Good().tell_me_hi()",
-                _ALLOWED_ATTR, {}, check_type=check_type)),
+    def test_method_return(self):
+        exec(expr_checker("Good().tell_me_hi()",
+            _ALLOWED_ATTR, {}, check_type=check_type)),
 
-            with self.assertRaises(ValueError):
-                exec(expr_checker("Good().gift_of_satan()",
-                     _ALLOWED_ATTR, {}, check_type=check_type))
+        with self.assertRaises(ValueError):
+            exec(expr_checker("Good().gift_of_satan()",
+                 _ALLOWED_ATTR, {}, check_type=check_type))
 
     def test_object_with(self):
         exec(expr_checker(cleandoc("""
@@ -261,7 +261,17 @@ class TestFuncChecker(unittest.TestCase):
         with self.assertRaises(ValueError):
             # This doesn't 
            exec(expr_checker(code, _ALLOWED_ATTR, {}, check_type=check_type)) 
-           
+
+    def test_deny_function_call(self):
+        with self.assertRaises(Exception) as e:
+            exec(expr_checker("print('Hello, World')", _ALLOWED_ATTR, {}, allow_function_calls=False))
+
+        self.assertEqual(e.exception.args[0], "safe_eval didn't allow you to call any functions")
+
+        with self.assertRaises(Exception) as e:
+            exec(expr_checker("kanban.get('sold')", _ALLOWED_ATTR, {}, allow_function_calls=False))
+
+        self.assertEqual(e.exception.args[0], "safe_eval didn't allow you to call any functions")
 
 if __name__ == "__main__":
     unittest.main()

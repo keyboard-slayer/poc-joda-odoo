@@ -19,8 +19,8 @@ def ast_default_check_type(method, value):
         return value
     elif type(value) not in safe_type:
         raise ValueError(f"safe_eval didn't like {value}")
-    else:
-        return value
+    
+    return value
 
 
 def ast_default_test(func, check_type, *args, **kwargs):
@@ -33,7 +33,7 @@ def ast_default_test(func, check_type, *args, **kwargs):
     return check_type("returned", func(*args, **kwargs))
 
 
-def check_ro(obj):
+def ast_check_ro(obj):
     if type(obj) in _readonly:
         return copy(obj)
     else:
@@ -41,17 +41,21 @@ def check_ro(obj):
 
 
 class NodeChecker(ast.NodeTransformer):
-    def __init__(self, check_fn, check_type_fn, allowed_attr):
+    def __init__(self, check_fn, allow_function_calls, check_type_fn, allowed_attr):
         self.check_fn = check_fn.__name__
         self.check_type_fn = check_type_fn.__name__
         self.allowed_attr = allowed_attr
+        self.fncall = allow_function_calls
 
-        self.reserved_name = [self.check_fn, self.check_type_fn, "check_ro"]
+        self.reserved_name = [self.check_fn, self.check_type_fn, "ast_check_ro"]
 
         super().__init__()
 
     def visit_Call(self, node):
         list(map(self.visit, node.args))
+
+        if not self.fncall:
+            raise Exception("safe_eval didn't allow you to call any functions")
 
         if isinstance(node.func, ast.Attribute):
             if node.func.attr not in self.allowed_attr:
@@ -60,7 +64,7 @@ class NodeChecker(ast.NodeTransformer):
 
             name = copy(node.func.value)
             node.func.value.__class__ = ast.Call
-            node.func.value.func = ast.Name("check_ro", ctx=ast.Load())
+            node.func.value.func = ast.Name("ast_check_ro", ctx=ast.Load())
             node.func.value.args = [name]
             node.func.value.keywords = []
 
@@ -100,7 +104,7 @@ class NodeChecker(ast.NodeTransformer):
 
         elif isinstance(node.ctx, ast.Store):
             return ast.Call(
-                func=ast.Name("check_ro", ctx=ast.Load()),
+                func=ast.Name("ast_check_ro", ctx=ast.Load()),
                 args=[node.value],
                 keywords=[]
             )
@@ -109,7 +113,7 @@ class NodeChecker(ast.NodeTransformer):
             raise ValueError("safe_eval: You can't delete attribute")
 
     def visit_Assign(self, node):
-        list(map(self.visit, node.targets))
+        node = self.generic_visit(node)
 
         return ast.Call(
             func=ast.Name(self.check_type_fn, ctx=ast.Load()),
@@ -118,13 +122,13 @@ class NodeChecker(ast.NodeTransformer):
         )
 
 
-def expr_checker(expr, allowed_attr, readonly, check_type=ast_default_check_type, check_function=ast_default_test):
+def expr_checker(expr, allowed_attr, readonly, allow_function_calls=True, check_type=ast_default_check_type, check_function=ast_default_test):
     global _readonly
 
     _readonly = readonly
     
     code = f"""{dedent(getsource(check_type))}
 {dedent(getsource(check_function))}
-{ast.unparse(NodeChecker(check_function, check_type, allowed_attr).visit(ast.parse(expr)))}
+{ast.unparse(NodeChecker(check_function, allow_function_calls, check_type, allowed_attr).visit(ast.parse(expr)))}
     """
     return code
