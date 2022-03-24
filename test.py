@@ -63,13 +63,30 @@ class TestFuncChecker(unittest.TestCase):
         def abc(a, b, c):
             return f"A: {a}, B: {b}, C: {c}"
 
-        eval(compile(expr_checker("abc('aaa', 'bbb', 'ccc')", ast_get_attr), "", "exec"))
+        code = cleandoc(
+            """
+            abc('aaa', 'bbb', 'ccc')
+            """
+        )
+
+        eval(compile(expr_checker(code, ast_get_attr), "", "exec"))
 
         with self.assertRaisesRegex(ValueError, "safe_eval didn't like <__main__.Dangerous object at .+>"):
-            exec(expr_checker("abc(a='aaa', c='ccc', b=Dangerous())", ast_get_attr, check_type=check_type))
+            code = cleandoc(
+                """
+                abc(a='aaa', c='ccc', b=Dangerous())
+                """
+            )
+            exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
     def test_comp_expr(self):
-        exec(expr_checker("[(lambda x: x**2)(n) for n in range(1, 11)]", ast_get_attr, check_type=check_type)),
+        code = cleandoc(
+            """
+            assert([(lambda x: x**2)(n) for n in range(1, 11)] == [1, 4, 9, 16, 25, 36, 49, 64, 81, 100])
+            """
+        )
+
+        exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
     def test_attribute(self):
         a = Good()
@@ -101,19 +118,32 @@ class TestFuncChecker(unittest.TestCase):
             exec(expr_checker("Good().gift_of_satan()", ast_get_attr, check_type=check_type))
 
     def test_object_with(self):
-        exec(expr_checker(cleandoc("""
+        code = cleandoc(
+            """
             with Good() as g:
-                g.tell_me_hi()"""), ast_get_attr, check_type=check_type))
+                g.tell_me_hi()
+            """
+        )
+
+        exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
         with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read gift_of_satan"):
-            exec(expr_checker(cleandoc("""
+            code = cleandoc(
+                """
                 with Good() as g:
-                    g.gift_of_satan()"""), ast_get_attr, check_type=check_type))
+                    g.gift_of_satan()
+                """
+            )
+            exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
         with self.assertRaisesRegex(ValueError, "safe_eval didn't like <__main__.Dangerous object at .+>"):
-            exec(expr_checker(cleandoc("""
+            code = cleandoc(
+                """
                 with Dangerous() as d:
-                    pass"""), ast_get_attr, check_type=check_type))
+                    pass
+                """
+            )
+            exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
     def test_function_return(self):
         def foo():
@@ -151,32 +181,35 @@ class TestFuncChecker(unittest.TestCase):
             exec(expr_checker("a.__class__ = Dangerous", ast_get_attr, check_type=check_type))
 
     def test_hijacking_global(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "safe_eval: doesn't permit you to modify locals\(\) and globals\(\)"):
             exec(expr_checker("globals()['Good'] = Dangerous", ast_get_attr, check_type=check_type))
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "safe_eval: doesn't permit you to modify locals\(\) and globals\(\)"):
             exec(expr_checker(cleandoc("locals()['evil'] = lambda: Dangerous()"), ast_get_attr, check_type=check_type))
 
     def test_forbidden_attr(self):
         a = Good()
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read _secret_stuff"):
             exec(expr_checker("print(a._secret_stuff)", ast_get_attr, check_type=check_type))
 
-        with self.assertRaises(ValueError):
+        # FIXME with ast_set_attr
+        with self.assertRaisesRegex(ValueError, "safe_eval: doesn't permit you to modify an attribute"):
             exec(expr_checker("a._secret_stuff = 42", ast_get_attr, check_type=check_type))
 
     def test_dangerous_lambda(self):
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "safe_eval didn't like <class '__main__.Dangerous'>"):
             exec(expr_checker("(lambda: print(Dangerous()))()", ast_get_attr, check_type=check_type))
 
     def test_multiline(self):
-        code = cleandoc("""
+        code = cleandoc(
+            """
             def b():
                 print('.', end='')
 
             b()
-        """)
+            """
+        )
 
         exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
@@ -184,7 +217,8 @@ class TestFuncChecker(unittest.TestCase):
         a = Good()
         a.evil = open("test.py")
 
-        with self.assertRaises(ValueError):
+        # FIXME with ast_set_attr
+        with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read evil"):
             exec(expr_checker("print(a.evil)", ast_get_attr, check_type=check_type))
 
         a.evil.close()
@@ -192,21 +226,27 @@ class TestFuncChecker(unittest.TestCase):
     def test_overwrite(self):
         a = Good()
 
-        code = cleandoc("""
+        with self.assertRaisesRegex(NameError, "safe_eval: check_type is a reserved name"):
+            code = cleandoc(
+                """
                 def check_type(t):
                     return t
-                
-                c = a.evil""")
 
-        code2 = cleandoc("""
-                check_type = lambda t: t
-                c = a.evil""")
+                c = a.evil
+                """
+            )
 
-        with self.assertRaises(NameError):
             exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
-        with self.assertRaises(NameError):
-            exec(expr_checker(code2, ast_get_attr, check_type=check_type))
+        with self.assertRaisesRegex(NameError, "safe_eval: check_type is a reserved name"):
+            code = cleandoc(
+                """
+                check_type = lambda t: t
+                c = a.evil
+                """
+            )
+
+            exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
     def test_isinstance_bad_idea(self):
         class Dangerous2(Good):
@@ -229,7 +269,9 @@ class TestFuncChecker(unittest.TestCase):
         # This pass
         exec(expr_checker(code, ast_get_attr, check_type=check_type2))
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError,
+                                    "safe_eval didn't like <__main__.TestFuncChecker.test_isinstance_bad_idea.<locals"
+                                    ">.Dangerous2 object at .+>"):
             # This doesn't 
             exec(expr_checker(code, ast_get_attr, check_type=check_type))
 
