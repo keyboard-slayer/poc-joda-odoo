@@ -9,7 +9,7 @@ from textwrap import dedent
 def ast_default_check_type(method, value):
     safe_type = (str, int, type(None), type(range(0)))
 
-    if hasattr(value, "__self__") and type(value.__self__) not in safe_type and type(value) not in safe_type:
+    if type(value) not in safe_type and not (hasattr(value, "__self__") and type(value.__self__) in safe_type):
         raise ValueError(f"safe_eval didn't like {value}")
 
     return value
@@ -105,6 +105,13 @@ class NodeChecker(ast.NodeTransformer):
                 raise NotImplementedError(f"{ast.dump(target, indent=4)}")
 
         return node
+
+    def visit_Subscript(self, node):
+        return ast.Call(
+            func=ast.Name(self.check_type_fn, ctx=ast.Load()),
+            args=[ast.Constant("constant"), node],
+            keywords=[]
+        )
 
 
 def expr_checker(expr, get_attr, allow_function_calls=True, check_type=ast_default_check_type,

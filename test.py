@@ -286,6 +286,14 @@ class TestFuncChecker(unittest.TestCase):
 
         self.assertEqual(e.exception.args[0], "safe_eval didn't permit you to call any functions")
 
+    def test_subscript(self):
+        a = [0, "Hi", Dangerous()]
+
+        exec(expr_checker("a[1]", ast_get_attr))
+
+        with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
+            exec(expr_checker("a[-1]", ast_get_attr))
+
 
 if __name__ == "__main__":
     unittest.main()
