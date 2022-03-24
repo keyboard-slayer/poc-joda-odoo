@@ -63,12 +63,15 @@ class NodeChecker(ast.NodeTransformer):
         )
 
     def visit_FunctionDef(self, node):
+        self.generic_visit(node)
         if node.name in self.reserved_name:
             raise NameError(f"safe_eval: {node.name} is a reserved name")
 
         return node
 
     def visit_Attribute(self, node):
+        self.generic_visit(node.value)
+
         if isinstance(node.ctx, ast.Load):
             subcall = ast.Call(
                 func=ast.Name(self.getattr, ctx=ast.Load()),
@@ -107,11 +110,13 @@ class NodeChecker(ast.NodeTransformer):
         return node
 
     def visit_Subscript(self, node):
+        self.generic_visit(node)
         return ast.Call(
             func=ast.Name(self.check_type_fn, ctx=ast.Load()),
             args=[ast.Constant("constant"), node],
             keywords=[]
         )
+
 
 
 def expr_checker(expr, get_attr, allow_function_calls=True, check_type=ast_default_check_type,

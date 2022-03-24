@@ -294,6 +294,18 @@ class TestFuncChecker(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
             exec(expr_checker("a[-1]", ast_get_attr))
 
+    def test_function_body(self):
+        Good.test = open('test.py')
+        code = cleandoc("""
+            def b():
+                print(Good.test)
+
+            b()
+        """)
+
+        with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read test"):
+            exec(expr_checker(code, ast_get_attr, check_type=check_type))
+
 
 if __name__ == "__main__":
     unittest.main()
