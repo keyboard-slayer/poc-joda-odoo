@@ -2,30 +2,35 @@
 # -*- coding: utf-8 -*-
 
 import ast
+import types
 from inspect import getsource
 from textwrap import dedent
 
 
-def ast_default_check_type(method, value):
-    safe_type = (str, int, type(None), type(range(0)))
+def __ast_default_check_type(method, value):
+    safe_type = (
+        str, bytes, float, complex, int, bool, types.NoneType,
+        tuple, list, set, dict,
+        range,
+        types.FunctionType, types.LambdaType, types.GeneratorType, types.MethodType,
+        types.BuiltinFunctionType, types.BuiltinMethodType, types.WrapperDescriptorType,
+        types.MethodWrapperType, types.MethodDescriptorType, types.ClassMethodDescriptorType,
+    )
 
-    if type(value) not in safe_type and not (hasattr(value, "__self__") and type(value.__self__) in safe_type):
+    if type(value) not in safe_type:
         raise ValueError(f"safe_eval didn't like {value}")
 
     return value
 
 
-def ast_default_test(func, check_type, *args, **kwargs):
+def __ast_default_check_call(func, check_type, *args, **kwargs):
     for arg in args:
         check_type("arguments", arg)
 
     for arg in kwargs.values():
         check_type("arguments", arg)
 
-    if func.__name__ == "<lambda>":
-        return check_type("returned", func(*args))
-    else:
-        return check_type("returned", func(*args, **kwargs))
+    return check_type("returned", func(*args, **kwargs))
 
 
 class NodeChecker(ast.NodeTransformer):
@@ -40,7 +45,7 @@ class NodeChecker(ast.NodeTransformer):
         super().__init__()
 
     def visit_Call(self, node):
-        self.generic_visit(node)
+        node = self.generic_visit(node)
 
         if not self.fncall:
             raise Exception("safe_eval didn't permit you to call any functions")
@@ -52,9 +57,6 @@ class NodeChecker(ast.NodeTransformer):
                 keywords=[]
             )
 
-        else:
-            self.generic_visit(node.func)
-
         return ast.Call(
             func=ast.Name(self.check_fn, ctx=ast.Load()),
             args=[node.func, ast.Name(
@@ -62,15 +64,8 @@ class NodeChecker(ast.NodeTransformer):
             keywords=node.keywords
         )
 
-    def visit_FunctionDef(self, node):
-        self.generic_visit(node)
-        if node.name in self.reserved_name:
-            raise NameError(f"safe_eval: {node.name} is a reserved name")
-
-        return node
-
     def visit_Attribute(self, node):
-        self.generic_visit(node.value)
+        node = self.generic_visit(node)
 
         if isinstance(node.ctx, ast.Load):
             subcall = ast.Call(
@@ -91,26 +86,8 @@ class NodeChecker(ast.NodeTransformer):
         elif isinstance(node.ctx, ast.Del):
             raise ValueError("safe_eval: doesn't permit you to delete attributes")
 
-    def visit_Assign(self, node):
-        self.generic_visit(node.value)
-
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                if target.id in self.reserved_name:
-                    raise NameError(f"safe_eval: {target.id} is a reserved name")
-            elif isinstance(target, ast.Attribute):
-                raise ValueError("safe_eval: doesn't permit you to modify an attribute")  # FIXME with ast_set_attr
-            elif isinstance(target, ast.Subscript) and isinstance(target.value,
-                                                                  ast.Call) and target.value.func.id in ["globals",
-                                                                                                         "locals"]:
-                raise ValueError("safe_eval: doesn't permit you to modify locals() and globals()")
-            else:
-                raise NotImplementedError(f"{ast.dump(target, indent=4)}")
-
-        return node
-
     def visit_Subscript(self, node):
-        self.generic_visit(node)
+        node = self.generic_visit(node)
         return ast.Call(
             func=ast.Name(self.check_type_fn, ctx=ast.Load()),
             args=[ast.Constant("constant"), node],
@@ -118,11 +95,21 @@ class NodeChecker(ast.NodeTransformer):
         )
 
 
+def expr_checker(expr, get_attr, allow_function_calls=True, check_type=__ast_default_check_type,
+                 check_function=__ast_default_check_call, return_code=True):
 
-def expr_checker(expr, get_attr, allow_function_calls=True, check_type=ast_default_check_type,
-                 check_function=ast_default_test):
-    code = f"""{dedent(getsource(check_type))}
-{dedent(getsource(check_function))}
-{ast.unparse(NodeChecker(check_function, allow_function_calls, check_type, get_attr).visit(ast.parse(expr)))}
-    """
-    return code
+    node_checker = NodeChecker(check_function, allow_function_calls, check_type, get_attr)
+    user_code = ast.unparse(node_checker.visit(ast.parse(expr)))
+
+    if return_code:
+        code = '\n'.join([
+            dedent(getsource(check_type)),
+            dedent(getsource(check_function)),
+            user_code
+        ])
+    else:
+        code = user_code
+
+    return (code, {check_type.__name__: check_type,
+                   check_function.__name__: check_function,
+                   get_attr.__name__: get_attr})
