@@ -3,8 +3,7 @@
 
 import ast
 import types
-from inspect import getsource
-from textwrap import dedent
+from inspect import cleandoc, getsource
 
 
 def __ast_default_check_type(method, value):
@@ -64,6 +63,23 @@ class NodeChecker(ast.NodeTransformer):
             keywords=node.keywords
         )
 
+    def visit_Name(self, node):
+        node = self.generic_visit(node)
+
+        if node.id in self.reserved_name:
+            raise NameError(f"safe_eval: {node.id} is a reserved name")
+
+        return node
+
+    def visit_FunctionDef(self, node):
+        node = self.generic_visit(node)
+
+        if node.name in self.reserved_name:
+            raise NameError(f"safe_eval: {node.name} is a reserved name")
+
+        return node
+
+
     def visit_Attribute(self, node):
         node = self.generic_visit(node)
 
@@ -94,6 +110,10 @@ class NodeChecker(ast.NodeTransformer):
             keywords=[]
         )
 
+    def visit_Assign(self, node):
+        node = self.generic_visit(node)
+        return node
+
 
 def expr_checker(expr, get_attr, allow_function_calls=True, check_type=__ast_default_check_type,
                  check_function=__ast_default_check_call, return_code=True):
@@ -103,8 +123,8 @@ def expr_checker(expr, get_attr, allow_function_calls=True, check_type=__ast_def
 
     if return_code:
         code = '\n'.join([
-            dedent(getsource(check_type)),
-            dedent(getsource(check_function)),
+            cleandoc(getsource(check_type)),
+            cleandoc(getsource(check_function)),
             user_code
         ])
     else:

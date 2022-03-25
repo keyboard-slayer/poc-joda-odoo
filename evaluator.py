@@ -51,28 +51,21 @@ def safe_get_attr(obj, key, value):
     return value
 
 
-def safe_eval(code):
-    _globals = {'__builtins__': _BUILTINS}
-    patch_code, _locals = expr_checker(code, safe_get_attr, return_code=False)
+def safe_eval(expr, globals_dict={}, locals_dict={}, mode="eval", check_type=None, allow_functions_calls=True):
+    if globals_dict is not None:
+        globals_dict = dict(globals_dict)
 
-    return unsafe_eval(patch_code, _globals, _locals)
+    if locals_dict is not None:
+        locals_dict = dict(locals_dict)
 
-
-def safe_eval_no_calls(code):
-    _globals = {'__builtins__': _BUILTINS}
-    patch_code, _locals = expr_checker(code, safe_get_attr, return_code=False, allow_function_calls=False)
-
-    return unsafe_eval(patch_code, _globals, _locals)
-
-# NOTE: Only for testing purpose
-def safe_eval_test(code, scope, check_type=None):
-    _globals = {'__builtins__': _BUILTINS}
+    globals_dict['__builtins__'] = _BUILTINS
 
     if check_type is None:
-        patch_code, _locals = expr_checker(code, safe_get_attr, return_code=False)
+        code, scope = expr_checker(expr, safe_get_attr, allow_function_calls=allow_functions_calls, return_code=False)
     else:
-        patch_code, _locals = expr_checker(code, safe_get_attr, return_code=False, check_type=check_type)
+        code, scope = expr_checker(expr, safe_get_attr, check_type=check_type, allow_function_calls=allow_functions_calls, return_code=False)
 
-    _locals.update(scope)
+    globals_dict.update(scope)
 
-    return unsafe_eval(patch_code, _globals, _locals)
+    c = compile(code, "", mode)
+    return unsafe_eval(c, globals_dict, locals_dict)
