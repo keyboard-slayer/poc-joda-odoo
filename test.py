@@ -9,7 +9,8 @@ from expr_checker import __ast_default_check_type
 
 
 class Dangerous:
-    pass
+    def say_goodbye(self):
+        return "GoodBye"
 
 
 class Good:
@@ -28,6 +29,9 @@ class Good:
     def gather_secret(self):
         return self._secret_stuff
 
+    def say_something_else(self, a):
+        self.a = a
+
 
 class ReadOnlyObject:
     def __init__(self, x):
@@ -44,13 +48,6 @@ def check_type(method, value):
         return value
 
     return __ast_default_check_type(method, value)
-
-
-def ast_get_attr(obj, key, value):
-    if key not in {"a", "x", "tell_me_hi", "set_x_value"}:
-        raise ValueError(f"safe_eval doesn't permit you to read {key}")
-
-    return value
 
 
 class TestFuncChecker(unittest.TestCase):
@@ -87,7 +84,7 @@ class TestFuncChecker(unittest.TestCase):
         a = Good()
 
         safe_eval("a.a", locals_dict={"a": a})
-        safe_eval("a.tell_me_hi()", locals_dict={"a": a})
+        safe_eval("a.tell_me_hi()", locals_dict={"a": a}, check_type=check_type)
 
         with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read eevil"):
             safe_eval("a.eevil", locals_dict={"a": a})
@@ -268,6 +265,15 @@ class TestFuncChecker(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read test"):
             safe_eval(code, check_type=check_type, globals_dict={"Good": Good}, mode="exec")
+
+    def test_method_call(self):
+        a = Good()
+        d = Dangerous()
+
+        safe_eval("a.say_something_else('Hello')", mode="exec", locals_dict={"a": a}, check_type=check_type)
+
+        with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
+            safe_eval('d.say_goodbye()', mode="exec", locals_dict={"d": d}, check_type=check_type)
 
 
 if __name__ == "__main__":

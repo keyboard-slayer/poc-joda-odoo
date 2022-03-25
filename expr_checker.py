@@ -29,6 +29,9 @@ def __ast_default_check_call(func, check_type, *args, **kwargs):
     for arg in kwargs.values():
         check_type("arguments", arg)
 
+    if hasattr(func, '__self__'):
+        check_type('called', func.__self__)
+
     return check_type("returned", func(*args, **kwargs))
 
 
