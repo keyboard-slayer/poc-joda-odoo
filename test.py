@@ -232,10 +232,10 @@ class TestFuncChecker(unittest.TestCase):
     def test_overwrite(self):
         a = Good()
 
-        with self.assertRaisesRegex(NameError, "safe_eval: check_type is a reserved name"):
+        with self.assertRaisesRegex(NameError, "safe_eval: __ast_check_type_fn is a reserved name"):
             code = cleandoc(
                 """
-                def check_type(t):
+                def __ast_check_type_fn(t):
                     return t
                 c = a.evil
                 """
@@ -243,10 +243,10 @@ class TestFuncChecker(unittest.TestCase):
 
             safe_eval(code, check_type=check_type, locals_dict={"a": a}, mode="exec")
 
-        with self.assertRaisesRegex(NameError, "safe_eval: check_type is a reserved name"):
+        with self.assertRaisesRegex(NameError, "safe_eval: __ast_check_type_fn is a reserved name"):
             code = cleandoc(
                 """
-                check_type = lambda t: t
+                __ast_check_type_fn = lambda t: t
                 c = a.evil
                 """
             )
@@ -379,7 +379,6 @@ class TestFuncChecker(unittest.TestCase):
             safe_eval(code, mode="exec", locals_dict={"result": result})
             exec(code, None, {"result": expected_result})
        
-        print(result) 
         self.assertEqual(result, expected_result)
 
 if __name__ == "__main__":

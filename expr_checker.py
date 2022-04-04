@@ -37,14 +37,9 @@ def __ast_default_check_call(func, check_type, *args, **kwargs):
 
 
 class NodeChecker(ast.NodeTransformer):
-    def __init__(self, check_fn, allow_function_calls, check_type_fn, get_attr):
-        self.check_fn = check_fn.__name__
-        self.check_type_fn = check_type_fn.__name__
+    def __init__(self, allow_function_calls):
         self.fncall = allow_function_calls
-        self.getattr = get_attr.__name__
-
-        self.reserved_name = [self.check_fn, self.check_type_fn, self.getattr]
-
+        self.reserved_name = ["__ast_check_fn", "__ast_check_type_fn", "__ast_check_attr"]
         super().__init__()
 
     def visit_Call(self, node):
@@ -55,15 +50,15 @@ class NodeChecker(ast.NodeTransformer):
 
         if isinstance(node.func, ast.Attribute):
             return ast.Call(
-                func=ast.Name(self.getattr, ast.Load()),
+                func=ast.Name("__ast_check_attr", ast.Load()),
                 args=[node.func.value, ast.Constant(node.func.attr), node],
                 keywords=[]
             )
 
         return ast.Call(
-            func=ast.Name(self.check_fn, ctx=ast.Load()),
+            func=ast.Name("__ast_check_fn", ctx=ast.Load()),
             args=[node.func, ast.Name(
-                self.check_type_fn, ctx=ast.Load())] + node.args,
+                "__ast_check_type_fn", ctx=ast.Load())] + node.args,
             keywords=node.keywords
         )
 
@@ -89,13 +84,13 @@ class NodeChecker(ast.NodeTransformer):
 
         if isinstance(node.ctx, ast.Load):
             subcall = ast.Call(
-                func=ast.Name(self.getattr, ctx=ast.Load()),
+                func=ast.Name("__ast_check_attr", ctx=ast.Load()),
                 args=[node.value, ast.Constant(node.attr), node],
                 keywords=[]
             )
 
             return ast.Call(
-                func=ast.Name(self.check_type_fn, ctx=ast.Load()),
+                func=ast.Name("__ast_check_type_fn", ctx=ast.Load()),
                 args=[ast.Constant("attribute"), subcall],
                 keywords=[]
             )
@@ -111,7 +106,7 @@ class NodeChecker(ast.NodeTransformer):
 
         if isinstance(node.ctx, ast.Load):
             return ast.Call(
-                func=ast.Name(self.check_type_fn, ctx=ast.Load()),
+                func=ast.Name("__ast_check_type_fn", ctx=ast.Load()),
                 args=[ast.Constant("constant"), node],
                 keywords=[]
             )
@@ -126,18 +121,20 @@ class NodeChecker(ast.NodeTransformer):
 def expr_checker(expr, get_attr, allow_function_calls=True, check_type=__ast_default_check_type,
                  check_function=__ast_default_check_call, return_code=True):
 
-    node_checker = NodeChecker(check_function, allow_function_calls, check_type, get_attr)
+    node_checker = NodeChecker(allow_function_calls)
     user_code = ast.unparse(node_checker.visit(ast.parse(expr)))
 
     if return_code:
         code = '\n'.join([
-            cleandoc(getsource(check_type)),
-            cleandoc(getsource(check_function)),
+            cleandoc(getsource(get_attr).replace(get_attr.__name__, "__ast_check_attr")),
+            cleandoc(getsource(check_type).replace(check_type.__name__, "__ast_check_type_fn")),
+            cleandoc(getsource(check_function).replace(checK_function.__name__, "__ast_check_fn")),
             user_code
         ])
+
     else:
         code = user_code
 
-    return (code, {check_type.__name__: check_type,
-                   check_function.__name__: check_function,
-                   get_attr.__name__: get_attr})
+    return (code, {"__ast_check_type_fn": check_type,
+                   "__ast_check_fn": check_function,
+                   "__ast_check_attr": get_attr})
