@@ -14,6 +14,7 @@ def __ast_default_check_type(method, value):
         types.FunctionType, types.LambdaType, types.GeneratorType, types.MethodType,
         types.BuiltinFunctionType, types.BuiltinMethodType, types.WrapperDescriptorType,
         types.MethodWrapperType, types.MethodDescriptorType, types.ClassMethodDescriptorType,
+        types.ModuleType
     )
 
     if type(value) not in safe_type:
@@ -107,11 +108,15 @@ class NodeChecker(ast.NodeTransformer):
 
     def visit_Subscript(self, node):
         node = self.generic_visit(node)
-        return ast.Call(
-            func=ast.Name(self.check_type_fn, ctx=ast.Load()),
-            args=[ast.Constant("constant"), node],
-            keywords=[]
-        )
+
+        if isinstance(node.ctx, ast.Load):
+            return ast.Call(
+                func=ast.Name(self.check_type_fn, ctx=ast.Load()),
+                args=[ast.Constant("constant"), node],
+                keywords=[]
+            )
+        else:
+            return node
 
     def visit_Assign(self, node):
         node = self.generic_visit(node)

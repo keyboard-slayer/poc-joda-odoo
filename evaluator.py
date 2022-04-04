@@ -45,7 +45,7 @@ _BUILTINS = {
 
 def safe_get_attr(obj, key, value):
     # NOTE: Those keys are for testing purpose
-    if key not in ("a", "x", "tell_me_hi", "set_x_value", "say_something_else", "say_goodbye"):
+    if key not in ("a", "x", "tell_me_hi", "set_x_value", "say_something_else", "say_goodbye", "__str__", "__len__"):
         raise ValueError(f"safe_eval doesn't permit you to read {key}")
 
     return value

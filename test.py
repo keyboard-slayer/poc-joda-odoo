@@ -188,13 +188,11 @@ class TestFuncChecker(unittest.TestCase):
 
         code = "(1, 'Hi', Dangerous2())"
 
-        # This pass
         safe_eval(code, locals_dict={"Dangerous2": Dangerous2}, check_type=check_type2)
 
         with self.assertRaisesRegex(ValueError,
                                     "safe_eval didn't like <__main__.TestFuncChecker.test_isinstance_bad_idea.<locals"
                                     ">.Dangerous2 object at .+>"):
-            # This doesn't
             safe_eval(code, locals_dict={"Dangerous2": Dangerous2})
 
     def test_deny_function_call(self):
@@ -275,6 +273,114 @@ class TestFuncChecker(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
             safe_eval('d.say_goodbye()', mode="exec", locals_dict={"d": d}, check_type=check_type)
 
+    def test_basics(self):
+        result = {}
+        expected_result = {}
+
+        codes = [
+            cleandoc(
+                """
+                result['loop_sum'] = 0
+                for i in range(2, 10):
+                    result['loop_sum'] += i
+                """
+            ),
+
+            cleandoc(
+                """
+                result['sum_range'] = sum(range(5))
+                """
+            ),
+
+            cleandoc(
+                """
+                result['index'] = list(range(5))[-1]
+                """
+            ),
+
+            cleandoc(
+                """
+                result['index_slice'] = list(range(5))[1:-1]
+                """
+            ),
+
+            cleandoc(
+                """
+                def gen():
+                    for i in range(5):
+                        yield 2 * 5
+                
+                result['generator'] = sum(gen())
+                """
+            ),
+
+            cleandoc(
+                """
+                result['lispcomp'] = [x * 2 for x in range(5)]
+                """
+            ),
+
+            cleandoc(
+                """
+                a = 4
+                b = 5
+                c = a + b
+                result['basic_math'] = c // 3
+                """
+            ),
+
+            cleandoc(
+                """
+                a = 4
+                b = 5
+                c = a + b
+                d = 0
+
+                if c == 9:
+                    d = c * 2
+                else:
+                    d = c
+
+                result['cond'] = d
+                """
+            ),
+
+            cleandoc(
+                """
+                result['strop'] = "Hello" + ",World !"
+                result['strop'] += 6 * "PythonProgrammingIsFun"
+                result['strop'] = result['strop'][::-1]
+                """
+            ),
+
+            cleandoc(
+                """
+                m = "Monkey"
+                l = ["a", "b"]
+
+                result['dunder_str'] = l.__str__()
+                result['dunder_len'] = m.__len__()    
+                """
+            ),
+
+            cleandoc(
+                """
+                i = 0
+                result['while_loop'] = ''
+
+                while i < 10:
+                    result['while_loop'] += chr(65+i)
+                    i += 1
+                """
+            )
+        ]
+
+        for code in codes:
+            safe_eval(code, mode="exec", locals_dict={"result": result})
+            exec(code, None, {"result": expected_result})
+       
+        print(result) 
+        self.assertEqual(result, expected_result)
 
 if __name__ == "__main__":
     unittest.main()
