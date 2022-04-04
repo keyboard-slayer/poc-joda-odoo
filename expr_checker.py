@@ -47,14 +47,7 @@ class NodeChecker(ast.NodeTransformer):
 
         if not self.fncall:
             raise Exception("safe_eval didn't permit you to call any functions")
-
-        if isinstance(node.func, ast.Attribute):
-            return ast.Call(
-                func=ast.Name("__ast_check_attr", ast.Load()),
-                args=[node.func.value, ast.Constant(node.func.attr), node],
-                keywords=[]
-            )
-
+            
         return ast.Call(
             func=ast.Name("__ast_check_fn", ctx=ast.Load()),
             args=[node.func, ast.Name(

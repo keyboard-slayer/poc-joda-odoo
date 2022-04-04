@@ -67,5 +67,6 @@ def safe_eval(expr, globals_dict={}, locals_dict={}, mode="eval", check_type=Non
 
     globals_dict.update(scope)
 
+    print(code)
     c = compile(code, "", mode)
     return unsafe_eval(c, globals_dict, locals_dict)
