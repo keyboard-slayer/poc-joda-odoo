@@ -37,8 +37,9 @@ def __ast_default_check_call(func, check_type, *args, **kwargs):
 
 
 class NodeChecker(ast.NodeTransformer):
-    def __init__(self, allow_function_calls):
+    def __init__(self, allow_function_calls, allow_private):
         self.fncall = allow_function_calls
+        self.priv = allow_private
         self.reserved_name = ["__ast_check_fn",
                               "__ast_check_type_fn", "__ast_check_attr"]
         super().__init__()
@@ -59,6 +60,10 @@ class NodeChecker(ast.NodeTransformer):
 
     def visit_Name(self, node):
         node = self.generic_visit(node)
+
+        if node.id.startswith("_") and not self.priv:
+            raise NameError(
+                f"safe_eval: didn't permit you to read private elements")
 
         if node.id in self.reserved_name:
             raise NameError(f"safe_eval: {node.id} is a reserved name")
@@ -110,10 +115,10 @@ class NodeChecker(ast.NodeTransformer):
             return node
 
 
-def expr_checker(expr, get_attr, allow_function_calls=True, check_type=__ast_default_check_type,
+def expr_checker(expr, get_attr, allow_function_calls=True, allow_private=False, check_type=__ast_default_check_type,
                  check_function=__ast_default_check_call, return_code=True):
 
-    node_checker = NodeChecker(allow_function_calls)
+    node_checker = NodeChecker(allow_function_calls, allow_private)
     user_code = ast.unparse(node_checker.visit(ast.parse(expr)))
 
     if return_code:

@@ -78,13 +78,15 @@ class TestFuncChecker(unittest.TestCase):
             [(lambda x: x**2)(n) for n in range(1, 11)]
             """
         )
-        self.assertEqual(safe_eval(code), [1, 4, 9, 16, 25, 36, 49, 64, 81, 100])
+        self.assertEqual(safe_eval(code), [
+                         1, 4, 9, 16, 25, 36, 49, 64, 81, 100])
 
     def test_attribute(self):
         a = Good()
 
         safe_eval("a.a", locals_dict={"a": a})
-        safe_eval("a.tell_me_hi()", locals_dict={"a": a}, check_type=check_type)
+        safe_eval("a.tell_me_hi()", locals_dict={
+                  "a": a}, check_type=check_type)
 
         with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read eevil"):
             safe_eval("a.eevil", locals_dict={"a": a})
@@ -130,7 +132,8 @@ class TestFuncChecker(unittest.TestCase):
         safe_eval('foo()', locals_dict={'foo': foo}, check_type=check_type)
 
         with self.assertRaisesRegex(ValueError, "safe_eval didn't like <__main__.Dangerous object at .+>"):
-            safe_eval('anti_foo()', locals_dict={'anti_foo': anti_foo}, check_type=check_type)
+            safe_eval('anti_foo()', locals_dict={
+                      'anti_foo': anti_foo}, check_type=check_type)
 
     def test_evil_decorator(self):
         def evil(func):
@@ -141,7 +144,8 @@ class TestFuncChecker(unittest.TestCase):
             pass
 
         with self.assertRaisesRegex(ValueError, "safe_eval didn't like <__main__.Dangerous object at .+>"):
-            safe_eval('foo()', locals_dict={'foo': foo, 'evil': evil}, check_type=check_type)
+            safe_eval('foo()', locals_dict={
+                      'foo': foo, 'evil': evil}, check_type=check_type)
 
     def test_from_good_to_dangerous(self):
         a = Good()
@@ -158,7 +162,8 @@ class TestFuncChecker(unittest.TestCase):
 
         # FIXME with ast_set_attr
         with self.assertRaisesRegex(ValueError, "safe_eval: doesn't permit you to store values in attributes"):
-            safe_eval('a._secret_stuff = 42', mode='exec', locals_dict={'a': a})
+            safe_eval('a._secret_stuff = 42',
+                      mode='exec', locals_dict={'a': a})
 
     def test_file_open(self):
         a = Good()
@@ -188,7 +193,8 @@ class TestFuncChecker(unittest.TestCase):
 
         code = "(1, 'Hi', Dangerous2())"
 
-        safe_eval(code, locals_dict={"Dangerous2": Dangerous2}, check_type=check_type2)
+        safe_eval(code, locals_dict={
+                  "Dangerous2": Dangerous2}, check_type=check_type2)
 
         with self.assertRaisesRegex(ValueError,
                                     "safe_eval didn't like <__main__.TestFuncChecker.test_isinstance_bad_idea.<locals"
@@ -199,12 +205,14 @@ class TestFuncChecker(unittest.TestCase):
         with self.assertRaises(Exception) as e:
             safe_eval("print('Hello, World')", allow_functions_calls=False)
 
-        self.assertEqual(e.exception.args[0], "safe_eval didn't permit you to call any functions")
+        self.assertEqual(
+            e.exception.args[0], "safe_eval didn't permit you to call any functions")
 
         with self.assertRaises(Exception) as e:
             safe_eval("kanban.get('sold')", allow_functions_calls=False)
 
-        self.assertEqual(e.exception.args[0], "safe_eval didn't permit you to call any functions")
+        self.assertEqual(
+            e.exception.args[0], "safe_eval didn't permit you to call any functions")
 
     def test_subscript(self):
         a = [0, "Hi", Dangerous()]
@@ -219,7 +227,8 @@ class TestFuncChecker(unittest.TestCase):
         safe_eval("a, b = 4, 5", mode="exec")
 
         with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
-            safe_eval("a = Dangerous()", mode="exec", locals_dict={"Dangerous": Dangerous})
+            safe_eval("a = Dangerous()", mode="exec",
+                      locals_dict={"Dangerous": Dangerous})
 
         with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
             safe_eval("a, b = Good(), Dangerous()", mode="exec", locals_dict={"Dangerous": Dangerous, "Good": Good},
@@ -227,7 +236,8 @@ class TestFuncChecker(unittest.TestCase):
 
     def test_dangerous_lambda(self):
         with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
-            safe_eval("(lambda : print(Dangerous()))()", mode="exec", globals_dict={"Dangerous": Dangerous})
+            safe_eval("(lambda : print(Dangerous()))()", mode="exec",
+                      globals_dict={"Dangerous": Dangerous})
 
     def test_overwrite(self):
         a = Good()
@@ -241,7 +251,8 @@ class TestFuncChecker(unittest.TestCase):
                 """
             )
 
-            safe_eval(code, check_type=check_type, locals_dict={"a": a}, mode="exec")
+            safe_eval(code, check_type=check_type,
+                      locals_dict={"a": a}, mode="exec")
 
         with self.assertRaisesRegex(NameError, "safe_eval: __ast_check_type_fn is a reserved name"):
             code = cleandoc(
@@ -251,7 +262,8 @@ class TestFuncChecker(unittest.TestCase):
                 """
             )
 
-            safe_eval(code, check_type=check_type, locals_dict={"a": a}, mode="exec")
+            safe_eval(code, check_type=check_type,
+                      locals_dict={"a": a}, mode="exec")
 
     def test_function_body(self):
         Good.test = open('test.py')
@@ -262,16 +274,19 @@ class TestFuncChecker(unittest.TestCase):
            """)
 
         with self.assertRaisesRegex(ValueError, "safe_eval doesn't permit you to read test"):
-            safe_eval(code, check_type=check_type, globals_dict={"Good": Good}, mode="exec")
+            safe_eval(code, check_type=check_type,
+                      globals_dict={"Good": Good}, mode="exec")
 
     def test_method_call(self):
         a = Good()
         d = Dangerous()
 
-        safe_eval("a.say_something_else('Hello')", mode="exec", locals_dict={"a": a}, check_type=check_type)
+        safe_eval("a.say_something_else('Hello')", mode="exec",
+                  locals_dict={"a": a}, check_type=check_type)
 
         with self.assertRaisesRegex(ValueError, "<__main__.Dangerous object at .+>"):
-            safe_eval('d.say_goodbye()', mode="exec", locals_dict={"d": d}, check_type=check_type)
+            safe_eval('d.say_goodbye()', mode="exec",
+                      locals_dict={"d": d}, check_type=check_type)
 
     def test_basics(self):
         result = {}
@@ -378,8 +393,9 @@ class TestFuncChecker(unittest.TestCase):
         for code in codes:
             safe_eval(code, mode="exec", locals_dict={"result": result})
             exec(code, None, {"result": expected_result})
-       
+
         self.assertEqual(result, expected_result)
+
 
 if __name__ == "__main__":
     unittest.main()

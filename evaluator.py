@@ -61,9 +61,11 @@ def safe_eval(expr, globals_dict={}, locals_dict={}, mode="eval", check_type=Non
     globals_dict['__builtins__'] = _BUILTINS
 
     if check_type is None:
-        code, scope = expr_checker(expr, safe_get_attr, allow_function_calls=allow_functions_calls, return_code=False)
+        code, scope = expr_checker(
+            expr, safe_get_attr, allow_function_calls=allow_functions_calls, allow_private=True, return_code=False)
     else:
-        code, scope = expr_checker(expr, safe_get_attr, check_type=check_type, allow_function_calls=allow_functions_calls, return_code=False)
+        code, scope = expr_checker(expr, safe_get_attr, check_type=check_type,
+                                   allow_function_calls=allow_functions_calls, allow_private=True, return_code=False)
 
     globals_dict.update(scope)
 
