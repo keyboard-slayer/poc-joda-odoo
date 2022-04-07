@@ -20,7 +20,8 @@ def __ast_default_check_type(method, value):
         range, types.GeneratorType
     )
 
-    if type(value) not in safe_type + require_checks_type or type(value) in require_checks_type and method in ["returned", "arguments"]:
+    if type(value) not in safe_type + require_checks_type or type(value) in require_checks_type and method in [
+        "returned", "arguments"]:
         raise ValueError(f"safe_eval didn't like {value}")
 
     return value
@@ -30,11 +31,9 @@ def __ast_default_check_call(func, check_type, *args, **kwargs):
     for arg in (*args, *kwargs.values()):
         check_type("arguments", arg)
 
-    if "." in func.__qualname__  and args and \
-        (not hasattr(args[0], func.__name__) or func != getattr(type(args[0]), func.__name__)):
-
+    if "." in func.__qualname__ and args and (
+            not hasattr(args[0], func.__name__) or func != getattr(type(args[0]), func.__name__)):
         raise ValueError("safe_eval didn't like method call without appropriate type")
-
 
     if hasattr(func, '__self__'):
         check_type('called', func.__self__)
@@ -123,7 +122,6 @@ class NodeChecker(ast.NodeTransformer):
 
 def expr_checker(expr, get_attr, allow_function_calls=True, allow_private=False, check_type=__ast_default_check_type,
                  check_function=__ast_default_check_call, return_code=True):
-
     node_checker = NodeChecker(allow_function_calls, allow_private)
     user_code = ast.unparse(node_checker.visit(ast.parse(expr)))
 
@@ -134,7 +132,7 @@ def expr_checker(expr, get_attr, allow_function_calls=True, allow_private=False,
             cleandoc(getsource(check_type).replace(
                 check_type.__name__, "__ast_check_type_fn")),
             cleandoc(getsource(check_function).replace(
-                checK_function.__name__, "__ast_check_fn")),
+                check_function.__name__, "__ast_check_fn")),
             user_code
         ])
 
