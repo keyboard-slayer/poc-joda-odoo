@@ -397,5 +397,19 @@ class TestFuncChecker(unittest.TestCase):
         self.assertEqual(result, expected_result)
 
 
+    def test_safe_self(self):
+        obj = Good()
+
+        code = "Good.tell_me_hi(Good())"
+        safe_eval(code, check_type=check_type, mode="eval", locals_dict={"Good": Good})
+
+        code = "obj.tell_me_hi()"
+        safe_eval(code, check_type=check_type, mode="eval", locals_dict={"obj": obj})
+
+        with self.assertRaises(ValueError):
+            code = "Good.tell_me_hi('hi')"
+            safe_eval(code, check_type=check_type, mode="eval", locals_dict={"Good": Good})
+
+
 if __name__ == "__main__":
     unittest.main()

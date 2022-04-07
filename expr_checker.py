@@ -30,6 +30,12 @@ def __ast_default_check_call(func, check_type, *args, **kwargs):
     for arg in (*args, *kwargs.values()):
         check_type("arguments", arg)
 
+    if "." in func.__qualname__  and args and \
+        (not hasattr(args[0], func.__name__) or func != getattr(type(args[0]), func.__name__)):
+
+        raise ValueError("safe_eval didn't like method call without appropriate type")
+
+
     if hasattr(func, '__self__'):
         check_type('called', func.__self__)
 
